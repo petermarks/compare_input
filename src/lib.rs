@@ -1,19 +1,14 @@
+extern crate zip_longest;
+
+use zip_longest::ZipLongestIteratorExt;
+use zip_longest::EitherOrBoth::Both;
+
 pub fn compare(s1: &str, s2: &str) -> bool {
   // debug assert because this check is expensive on long strings.
   debug_assert!(s1.is_ascii(), "Input s1 must only contain ascii characters.");
   debug_assert!(s2.is_ascii(), "Input s2 must only contain ascii characters.");
 
-  let mut iter1 = s1.bytes();
-  let mut iter2 = s2.bytes();
-
-  loop {
-    match (iter1.next(), iter2.next()) {
-      (None, None) => break true,
-      (None, _) => break false,
-      (_, None) => break false,
-      (Some(c1), Some(c2)) => if c1 != c2 {break false}
-    }
-  }
+  s1.bytes().zip_longest(s2.bytes()).all(|it| if let Both(a, b) = it {a == b} else {false})
 }
 
 #[cfg(test)]

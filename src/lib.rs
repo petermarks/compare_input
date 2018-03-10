@@ -2,6 +2,8 @@ extern crate zip_longest;
 
 use zip_longest::ZipLongestIteratorExt;
 use zip_longest::EitherOrBoth::Both;
+use std::iter::Rev;
+use std::str::Bytes;
 
 // Compare two input strings for equality. Input strings consist of ascii
 // characters, backspaces and caps lock toggles. Backspaces are represented as
@@ -21,26 +23,43 @@ pub fn compare(s1: &str, s2: &str) -> bool {
   mk_iter(s1).zip_longest(mk_iter(s2)).all(|it| if let Both(a, b) = it {a == b} else {false})
 }
 
-// We would like to return a Filter iterator here, but it contains a closure
-// which has an anonymous type, so can't be written. Rust RFC 1522 provides a
-// solution, but is not stable yet. For now we will use a box and a trait
-// object, but this introduces indirection and dynamic dispatch which should not
-// be necessary. It would be better to implement our own iterator rather than
-// using the generalised filter. We'll try this next.
-fn mk_iter<'a>(s: &'a str) -> Box<Iterator<Item=u8> + 'a> {
-  let mut skip = 0;
+// Iter iterates over the input string in reverse skipping characters which have
+// been backspaced.
+struct Iter<'a> {
+  bytes: Rev<Bytes<'a>>,
+} 
 
-  let iter = s.bytes().rev().filter(move |c| {
-    if *c == b'\0' {
-      skip += 1; false
-    } else if skip == 0 {
-      true
-    } else {
-      skip -= 1; false
+#[inline]
+fn mk_iter<'a>(s: &'a str) -> Iter<'a> {
+  Iter{
+    bytes: s.bytes().rev(),
+  }
+}
+
+impl<'a> Iterator for Iter<'a> {
+  type Item = u8;
+
+  #[inline]
+  fn next(&mut self) -> Option<u8> {
+    let mut skip = 0;
+
+    for c in &mut self.bytes {
+      if c == b'\0' {
+        skip += 1;
+      } else if skip == 0 {
+        return Some(c);
+      } else {
+        skip -= 1;
+      }
     }
-  });
+    None
+  }
 
-  Box::new(iter)
+  #[inline]
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    let (_, upper) = self.bytes.size_hint();
+    (0, upper) // can't know a lower bound, as all remaining bytes could be deleted
+  }
 }
 
 #[cfg(test)]
